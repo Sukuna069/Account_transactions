@@ -1,50 +1,51 @@
 import json
 from datetime import datetime
+def mask_card_number(card_number):
+    # Маскируем номер карты XXXX XX** **** XXXX
+    masked_number = card_number[:4] + ' ' + '*' * 4 + ' ' + '*' * 4 + ' ' + card_number[-4:]
+    return masked_number
+
+def mask_account_number(account_number):
+    # Маскируем номер счета **XXXX
+    masked_number = '*' * 2 + account_number[-4:]
+    return masked_number
+
+def format_operation(operation):
+    # Преобразование даты из исходного формата в объект datetime
+    date = datetime.strptime(operation['date'], "%Y-%m-%dT%H:%M:%S.%f")
+    # Форматирование даты в нужный формат "11.11.19"
+    formatted_date = date.strftime("%d.%m.%y")
+
+    description = operation['description']
+    from_account = operation.get('from', '')
+    to_account = operation['to']
+
+    # Обработка значения по ключу 'operationAmount'
+    operation_amount = operation.get('operationAmount', {})
+    amount = operation_amount.get('amount', '')
+    currency = operation_amount.get('currency', '').get('name')
+
+    masked_from_account = mask_card_number(from_account) if from_account else ''
+    masked_to_account = mask_account_number(to_account)
+    formatted_operation = f"{formatted_date} {description}\n{masked_from_account} -> {masked_to_account}\n{amount} {currency}\n"
+    return formatted_operation
 
 
-def filter_sort(templates):
-    items_list = [item for item in templates if item.get("state") == "EXECUTED"]
-    items_list.sort(key=lambda x: parse_date(x.get("date")), reverse=True)
-    last_items = items_list[:5]
-    return last_items
+def get_last_executed_operations(operations_data):
+    executed_operations = [operation for operation in operations_data if 'state' in operation and operation['state'] == 'EXECUTED']
+    sorted_operations = sorted(executed_operations, key=lambda x: x['date'], reverse=True)
+    last_executed_operations = sorted_operations[:5]
+    return last_executed_operations
 
+def main():
+    with open('operations.json', 'r', encoding='utf-8') as file:
+        operations_data = json.load(file)
 
-def parse_date(date_str):
-    try:
-        return datetime.strptime(date_str, "%d.%m.%Y")
-    except ValueError:
-        return datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%S.%f")
+    last_executed_operations = get_last_executed_operations(operations_data)
 
-
-def prepare_message(last_items):
-    result = []
-    for item in last_items:
-        description = item.get("description")
-        date = item.get('date')
-        from_x = item.get('from', '')
-        to = item.get('to', '')
-        last_four_digits_from = from_x[-4:] if from_x else ''
-        last_four_digits_to = to[-4:] if to else ''
-        operation_amount = item.get('operationAmount').get('amount')
-        operation_currency = item.get('operationAmount').get('currency').get('name')
-        formatted_date = parse_date(date).strftime("%d.%m.%Y")
-        sender_info = f"Visa Platinum 7000 {from_x[-9:-5]}** **** {last_four_digits_from}" if from_x else "N/A"
-        receiver_info = f" -> Счет **{last_four_digits_to}" if to else " -> N/A"
-        result.append(
-            f"{formatted_date} {description}\n{sender_info}{receiver_info}\n{operation_amount} {operation_currency}")
-    return result
-
+    for operation in last_executed_operations:
+        formatted_operation = format_operation(operation)
+        print(formatted_operation)
 
 if __name__ == "__main__":
-    # Пример использования:
-    with open('operations.json', "r", encoding="utf-8") as f:
-        file_content = f.read()
-        templates = json.loads(file_content)
-
-    x = filter_sort(templates)
-    output = prepare_message(x)
-    for line in output:
-        print(line)
-
-
-
+    main()
